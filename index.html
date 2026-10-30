@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>名言ギャラリー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#edf0f7;--card:#fff;--ink:#161c33;--muted:#5b6482;--line:#c9d0e4;--accent:#2b44f5;--mark:#ffe14d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.7 "Zen Kaku Gothic New",system-ui,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:24px 16px 64px}
+h1{font:400 clamp(28px,5vw,44px)/1.1 "Dela Gothic One","Zen Kaku Gothic New",sans-serif;margin:0 0 20px}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:24px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px;margin-bottom:32px}
+@media(max-width:720px){.hero{grid-template-columns:1fr}}
+.mark{display:inline;margin:0;font:400 28px/1.5 "Dela Gothic One",sans-serif;background:linear-gradient(transparent 55%,var(--mark) 55%)}
+.hero p{margin:10px 0 0;color:var(--muted)}
+.thumb{display:block;padding:0;border:1px solid var(--line);border-radius:6px;background:#f6f7fb;overflow:hidden;cursor:zoom-in;width:100%}
+.thumb img{display:block;width:100%;height:auto}
+#tabs{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line)}
+#tabs button{flex:none;background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;margin-bottom:-1px;color:var(--muted)}
+#tabs button[aria-selected=true]{color:var(--ink);font-weight:700;border-bottom-color:var(--accent)}
+#tabs small{margin-left:6px;color:var(--muted)}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:16px 0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
+.seg button{border:0;background:none;padding:6px 14px}
+.seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+#dir{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 12px}
+#count{margin-left:auto;color:var(--muted)}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;align-items:start}
+figure{margin:0}
+figcaption{margin-top:4px;font-size:13px;color:var(--muted)}
+.unk{background:var(--mark);color:var(--ink);padding:0 6px;border-radius:3px;font-weight:700}
+#msg{padding:24px 0;color:var(--muted)}
+#msg.err{color:#b3261e}
+dialog{border:0;padding:0;background:transparent;max-width:min(96vw,1100px);color:#fff}
+dialog::backdrop{background:rgba(22,28,51,.85)}
+dialog img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-radius:6px;background:#fff}
+.lb{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px}
+.lb button{background:var(--card);color:var(--ink);border:0;border-radius:8px;padding:6px 14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>名言ギャラリー</h1>
+  <section class="hero" id="hero" hidden>
+    <div>
+      <h2 class="mark">今日の名言</h2>
+      <p id="heroInfo"></p>
+    </div>
+    <button class="thumb" id="heroBtn" aria-label="今日の名言を拡大して表示"></button>
+  </section>
+
+  <div id="tabs" role="tablist" aria-label="人で絞り込み"></div>
+  <div class="bar">
+    <div class="seg" role="group" aria-label="並び替えの基準">
+      <button id="kDate" aria-pressed="true">日付順</button>
+      <button id="kNew" aria-pressed="false">新着順</button>
+    </div>
+    <button id="dir" aria-label="並び順を切り替え"></button>
+    <span id="count"></span>
+  </div>
+  <div id="msg">読み込み中…</div>
+  <div id="grid"></div>
+</div>
+
+<dialog id="dlg">
+  <img id="dImg" alt="">
+  <div class="lb">
+    <button id="prev" aria-label="前の画像">←</button>
+    <span id="dCap"></span>
+    <button id="next" aria-label="次の画像">→</button>
+    <button id="close">閉じる</button>
+  </div>
+</dialog>
+
+<script>
+// ▼ GASのウェブアプリURL
+const API_URL = 'https://script.google.com/macros/s/AKfycbxQ0hcpEPlBHUsrwhdL2vy8TbuQ6kXn7jSVLmcnHjV-KPRbgySq_tEO5id70L6Z-t3QSg/exec';
+
+const $ = s => document.querySelector(s);
+const st = { items: [], people: [], tab: 'all', key: 'date', dir: 'desc' };
+const box = { list: [], i: 0 };
+
+// ファイル名 quote_<DiscordのID>.webp から投稿日時を取り出す（取れなければ null = 日付不明）
+function snowDate(name) {
+  const m = name.match(/^quote_(\d{15,})/i);
+  if (!m) return null;
+  try { return new Date(Number((BigInt(m[1]) >> 22n) + 1420070400000n)); } catch { return null; }
+}
+const fmt = d => d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'Asia/Tokyo' });
+const src = (id, w) => `https://drive.google.com/thumbnail?id=${id}&sz=w${w}`;
+function mkImg(it, w, lazy) {
+  const i = new Image();
+  i.alt = `${it.person} の名言`;
+  if (lazy) i.loading = 'lazy';
+  i.src = src(it.id, w);
+  return i;
+}
+const label = it => `${it.person}・${it.posted ? fmt(it.posted) : '日付不明'}`;
+
+function hash(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function todayKey() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
+
+function renderHero() {
+  if (!st.items.length) return;
+  const k = todayKey();
+  // 日付ごとに固定のランダム（画像が増えても当日の選出が変わりにくい方式）
+  const pick = st.items.reduce((a, b) => hash(k + a.id) >= hash(k + b.id) ? a : b);
+  const btn = $('#heroBtn');
+  btn.replaceChildren(mkImg(pick, 900, false));
+  $('#heroInfo').textContent = `${k.replace(/-/g, '/')}　${label(pick)}`;
+  btn.onclick = () => openAt([pick], 0);
+  $('#hero').hidden = false;
+}
+
+function renderTabs() {
+  const t = $('#tabs');
+  t.replaceChildren();
+  const tabs = [{ name: 'all', text: 'すべて', n: st.items.length }, ...st.people.map(p => ({ name: p.name, text: p.name, n: p.count }))];
+  for (const x of tabs) {
+    const b = document.createElement('button');
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(st.tab === x.name));
+    b.textContent = x.text;
+    const s = document.createElement('small');
+    s.textContent = x.n;
+    b.append(s);
+    b.onclick = () => { st.tab = x.name; location.hash = x.name === 'all' ? '' : encodeURIComponent(x.name); render(); };
+    t.append(b);
+  }
+}
+
+function visible() {
+  const list = st.tab === 'all' ? [...st.items] : st.items.filter(i => i.person === st.tab);
+  const s = st.dir === 'asc' ? 1 : -1;
+  return list.sort((a, b) => {
+    if (st.key === 'date') {
+      // 日付不明は常に先頭
+      if (!a.posted && !b.posted) return b.uploaded - a.uploaded;
+      if (!a.posted) return -1;
+      if (!b.posted) return 1;
+      return (a.posted - b.posted) * s;
+    }
+    return (a.uploaded - b.uploaded) * s;
+  });
+}
+
+function render() {
+  renderTabs();
+  $('#kDate').setAttribute('aria-pressed', String(st.key === 'date'));
+  $('#kNew').setAttribute('aria-pressed', String(st.key === 'new'));
+  const desc = st.dir === 'desc';
+  $('#dir').textContent = (desc ? '↓ ' : '↑ ') + (st.key === 'date' ? (desc ? '新しい順' : '古い順') : (desc ? '追加が新しい順' : '追加が古い順'));
+  const list = visible();
+  $('#count').textContent = `${list.length}枚`;
+  const g = $('#grid');
+  g.replaceChildren();
+  list.forEach((it, idx) => {
+    const f = document.createElement('figure');
+    const b = document.createElement('button');
+    b.className = 'thumb';
+    b.setAttribute('aria-label', `${label(it)} を拡大`);
+    b.append(mkImg(it, 400, true));
+    b.onclick = () => openAt(list, idx);
+    const c = document.createElement('figcaption');
+    if (st.key === 'date') {
+      if (st.tab === 'all') c.append(it.person + '・');
+      if (it.posted) c.append(fmt(it.posted));
+      else { const u = document.createElement('span'); u.className = 'unk'; u.textContent = '日付不明'; c.append(u); }
+    } else {
+      c.textContent = (st.tab === 'all' ? it.person + '・' : '') + '追加 ' + fmt(it.uploaded);
+    }
+    f.append(b, c);
+    g.append(f);
+  });
+}
+
+function openAt(list, i) {
+  box.list = list; box.i = i;
+  const it = list[i];
+  $('#dImg').src = src(it.id, 1600);
+  $('#dImg').alt = `${it.person} の名言`;
+  $('#dCap').textContent = label(it);
+  $('#prev').hidden = $('#next').hidden = list.length < 2;
+  if (!$('#dlg').open) $('#dlg').showModal();
+}
+const step = d => { const n = box.list.length; openAt(box.list, (box.i + d + n) % n); };
+$('#prev').onclick = () => step(-1);
+$('#next').onclick = () => step(1);
+$('#close').onclick = () => $('#dlg').close();
+$('#dlg').addEventListener('click', e => { if (e.target === $('#dlg')) $('#dlg').close(); });
+document.addEventListener('keydown', e => {
+  if (!$('#dlg').open || box.list.length < 2) return;
+  if (e.key === 'ArrowLeft') step(-1);
+  if (e.key === 'ArrowRight') step(1);
+});
+
+$('#kDate').onclick = () => { st.key = 'date'; render(); };
+$('#kNew').onclick = () => { st.key = 'new'; render(); };
+$('#dir').onclick = () => { st.dir = st.dir === 'desc' ? 'asc' : 'desc'; render(); };
+
+(async () => {
+  try {
+    const res = await fetch(API_URL);
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    st.people = data.people.map(p => ({ name: p.name, count: p.items.length }));
+    st.items = data.people.flatMap(p => p.items.map(it => ({
+      id: it.id, name: it.name, person: p.name,
+      posted: snowDate(it.name),
+      uploaded: new Date(it.created || it.date)
+    })));
+    const h = decodeURIComponent(location.hash.slice(1));
+    if (st.people.some(p => p.name === h)) st.tab = h;
+    $('#msg').hidden = true;
+    renderHero();
+    render();
+  } catch (e) {
+    const m = $('#msg');
+    m.className = 'err';
+    m.textContent = '読み込めませんでした。GASのデプロイ設定（アクセスできるユーザー：全員）とURLを確認してください。';
+  }
+})();
+</script>
+</body>
+</html>
