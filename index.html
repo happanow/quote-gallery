@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>名言ギャラリー</title>
+<title>MiQ Archive</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
@@ -20,12 +20,15 @@ button{font:inherit;color:inherit;cursor:pointer}
 .layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:28px;align-items:start}
 
 /* 左メニュー */
-#tabs{position:sticky;top:16px;display:flex;flex-direction:column;gap:2px;max-height:calc(100vh - 32px);overflow-y:auto;box-shadow:inset 1px 0 0 var(--line)}
+.side{position:sticky;top:16px;display:flex;flex-direction:column;gap:16px;max-height:calc(100vh - 32px)}
+#tabs{position:relative;display:flex;flex-direction:column;gap:2px;min-height:0;overflow-y:auto;box-shadow:inset 1px 0 0 var(--line)}
+.drive{margin-top:12px;padding:0 12px;color:var(--muted);font-size:12px;text-decoration:none;transition:color .2s}
+.drive:hover{color:var(--accent);text-decoration:underline}
 #tabs button{position:relative;z-index:1;display:flex;justify-content:space-between;gap:8px;text-align:left;background:none;border:0;padding:8px 12px;color:var(--muted);overflow-wrap:anywhere;transition:color .2s,background-color .2s}
 #tabs button:hover{color:var(--ink)}
-#tabs button[aria-selected=true]{color:var(--ink);font-weight:700;background:var(--card)}
+#tabs button[aria-selected=true]{color:var(--ink);font-weight:700}
 #tabs small{color:var(--muted);font-weight:400}
-.ind{position:absolute;z-index:2;left:0;top:0;width:3px;height:var(--h,0);background:var(--accent);transform:translateY(var(--y,0));pointer-events:none}
+.ind{position:absolute;z-index:0;left:0;top:0;width:100%;height:var(--h,0);background:var(--card);border-left:3px solid var(--accent);transform:translateY(var(--y,0));pointer-events:none}
 #tabs.ready .ind{transition:transform .28s var(--ease),height .28s var(--ease)}
 
 /* 今日の名言 */
@@ -61,18 +64,19 @@ dialog::backdrop{background:rgba(22,28,51,.85)}
 dialog[open]{animation:pop .2s var(--ease)}
 dialog[open]::backdrop{animation:fade .2s}
 dialog img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-radius:6px;background:#fff}
-.lb{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px}
+.lb{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-top:10px}
 .lb button,.lb a{background:var(--card);color:var(--ink);border:0;border-radius:8px;padding:6px 14px;text-decoration:none}
-#dCap{flex:1;text-align:left}
+#dCap{flex:1 1 160px;text-align:left}
 @keyframes fade{from{opacity:0}}
 @keyframes pop{from{opacity:0;transform:scale(.97)}}
 
 @media(max-width:900px){.hero{grid-template-columns:1fr}}
 @media(max-width:720px){
 .layout{grid-template-columns:1fr;gap:16px}
-#tabs{position:relative;top:auto;flex-direction:row;overflow-x:auto;max-height:none;box-shadow:inset 0 -1px 0 var(--line)}
+.side{position:static;max-height:none;gap:10px}
+#tabs{flex-direction:row;overflow-x:auto;box-shadow:inset 0 -1px 0 var(--line)}
 #tabs button{flex:none}
-.ind{left:0;top:auto;bottom:0;width:var(--w,0);height:3px;transform:translateX(var(--x,0))}
+.ind{width:var(--w,0);height:100%;border-left:0;border-bottom:3px solid var(--accent);transform:translateX(var(--x,0))}
 #tabs.ready .ind{transition:transform .28s var(--ease),width .28s var(--ease)}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
@@ -80,9 +84,12 @@ dialog img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
 </head>
 <body>
 <div class="wrap">
-  <h1>名言ギャラリー</h1>
+  <h1>MiQ Archive</h1>
   <div class="layout">
-    <nav id="tabs" role="tablist" aria-orientation="vertical" aria-label="人で絞り込み"></nav>
+    <aside class="side">
+      <nav id="tabs" role="tablist" aria-orientation="vertical" aria-label="人で絞り込み"></nav>
+      <a class="drive" href="https://drive.google.com/drive/folders/1hnulzdNhY9CNH39vSIZi7YYZVdjtgEg7" target="_blank" rel="noopener">元のドライブフォルダを開く ↗</a>
+    </aside>
     <main>
       <section class="hero" id="hero" hidden>
         <div>
@@ -114,6 +121,7 @@ dialog img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
     <span id="dCap"></span>
     <button id="next" aria-label="次の画像">→</button>
     <button id="again" hidden>もう一度</button>
+    <a id="gd" href="#" target="_blank" rel="noopener">ドライブで見る</a>
     <a id="dl" href="#" download>ダウンロード</a>
     <button id="close">閉じる</button>
   </div>
@@ -134,7 +142,7 @@ function snowDate(name) {
   try { return new Date(Number((BigInt(m[1]) >> 22n) + 1420070400000n)); } catch { return null; }
 }
 const fmt = d => d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'Asia/Tokyo' });
-const ymd = d => new Date(d.getTime() + 9 * 3600e3).toISOString().slice(2, 10).replace(/-/g, '/'); // yy/mm/dd（日本時間）
+const ymd = d => new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '/'); // yyyy/mm/dd（日本時間）
 const src = (id, w) => `https://drive.google.com/thumbnail?id=${id}&sz=w${w}`;
 function mkImg(it, w, lazy) {
   const i = new Image();
@@ -259,6 +267,7 @@ function openAt(list, i, random = false) {
   $('#dImg').src = src(it.id, 1600);
   $('#dImg').alt = `${it.person} の名言`;
   $('#dCap').textContent = label(it);
+  $('#gd').href = `https://drive.google.com/file/d/${it.id}/view`;
   $('#dl').href = `https://drive.usercontent.google.com/download?id=${it.id}&export=download`;
   $('#dl').setAttribute('download', it.name);
   $('#prev').hidden = $('#next').hidden = list.length < 2;
