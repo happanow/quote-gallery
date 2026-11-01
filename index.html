@@ -151,6 +151,8 @@ const $ = s => document.querySelector(s);
 const st = { items: [], people: [], tab: 'all', key: 'date', dir: 'desc' };
 const box = { list: [], i: 0, random: false };
 const view = { list: [], n: 0 };
+const disp = n => /^others?$/i.test(n) ? 'その他' : n; // 表示名（Others → その他）
+const isOther = n => disp(n) === 'その他';
 
 // ファイル名 quote_<DiscordのID>.webp から投稿日時を取り出す（取れなければ null = 日付不明）
 function snowDate(name) {
@@ -347,9 +349,11 @@ new IntersectionObserver(es => topBtn.classList.toggle('show', !es[0].isIntersec
 topBtn.onclick = () => window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 
 function init(data, first) {
-  st.people = data.people.map(p => ({ name: p.name, count: p.items.length }));
-  st.items = data.people.flatMap(p => p.items.map(it => ({
-    id: it.id, name: it.name, person: p.name,
+  // 「その他」は常に最後（それ以外の並びはそのまま）
+  const ppl = [...data.people].sort((a, b) => isOther(a.name) - isOther(b.name));
+  st.people = ppl.map(p => ({ name: disp(p.name), count: p.items.length }));
+  st.items = ppl.flatMap(p => p.items.map(it => ({
+    id: it.id, name: it.name, person: disp(p.name),
     posted: snowDate(it.name),
     uploaded: new Date(it.created || it.date)
   })));
