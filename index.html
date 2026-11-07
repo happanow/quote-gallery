@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MiQ Archive</title>
+<script>
+// 画像などのURLで直接開かれたときは、判定が済むまで画面を隠す
+if (location.pathname !== new URL('.', location.href).pathname && !/\/index\.html$/.test(location.pathname)) document.documentElement.classList.add('deep');
+</script>
 <link rel="preconnect" href="https://script.google.com" crossorigin>
 <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
 <link rel="preconnect" href="https://drive.google.com">
@@ -64,6 +68,14 @@ figcaption{margin-top:4px;font-size:13px;color:var(--muted)}
 #msg{padding:24px 0;color:var(--muted)}
 #msg.err{color:#b3261e}
 
+/* 404 */
+.deep .wrap{visibility:hidden}
+.nf .wrap,.nf #top{display:none}
+#nf{max-width:520px;margin:20vh auto 0;padding:0 16px;text-align:center}
+#nf h1{font-size:72px;margin:0}
+#nf p{margin:6px 0;color:var(--muted)}
+#nf .sub{font-size:20px;font-weight:700;color:var(--ink);margin-bottom:20px}
+
 /* 先頭へ戻るボタン */
 #top{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:5;width:44px;height:44px;border:0;border-radius:50%;background:var(--ink);color:#fff;font-size:20px;line-height:1;opacity:0;visibility:hidden;transform:translateY(8px);transition:opacity .25s var(--ease),transform .25s var(--ease),visibility .25s,background-color .2s}
 #top.show{opacity:1;visibility:visible;transform:none}
@@ -95,6 +107,11 @@ dialog img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
 </head>
 <body>
 <div id="sentinel" aria-hidden="true"></div>
+<section id="nf" hidden>
+  <h1>404</h1>
+  <p class="sub">Not Found</p>
+  <p>指定されたページは見つかりませんでした。正しいURLか確認してください。</p>
+</section>
 <div class="wrap">
   <h1>MiQ Archive</h1>
   <div class="layout">
@@ -155,6 +172,9 @@ const disp = n => /^others?$/i.test(n) ? 'その他' : n; // 表示名（Others 
 const isOther = n => disp(n) === 'その他';
 const BASE = new URL('.', location.href).pathname; // サイトの基準パス（例：/quote-gallery/）
 let nameCount = {}; // 同じファイル名が複数あるか（image.webp など）の判定用
+const DEEP = document.documentElement.classList.contains('deep'); // 画像などのURLで直接開かれたか
+let deepDone = !DEEP; // 直接アクセスの判定が済んだか
+let started = false;  // 最初の描画を終えたか
 
 // ファイル名 quote_<DiscordのID>.webp から投稿日時を取り出す（取れなければ null = 日付不明）
 function snowDate(name) {
@@ -379,7 +399,13 @@ const topBtn = $('#top');
 new IntersectionObserver(es => topBtn.classList.toggle('show', !es[0].isIntersecting)).observe($('#sentinel'));
 topBtn.onclick = () => window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 
-function init(data, first) {
+function showNotFound() {
+  document.documentElement.classList.replace('deep', 'nf');
+  $('#nf').hidden = false;
+  document.title = '404 Not Found - MiQ Archive';
+}
+
+function init(data, fresh) {
   // 「その他」は常に最後（それ以外の並びはそのまま）
   const ppl = [...data.people].sort((a, b) => isOther(a.name) - isOther(b.name));
   st.people = ppl.map(p => ({ name: disp(p.name), count: p.items.length }));
@@ -390,17 +416,32 @@ function init(data, first) {
   })));
   nameCount = {};
   for (const i of st.items) nameCount[i.name] = (nameCount[i.name] || 0) + 1;
-  if (first) {
+  if (!started) {
     const h = decodeURIComponent(location.hash.slice(1));
     if (st.people.some(p => p.name === h)) st.tab = h;
   }
   if (st.tab !== 'all' && !st.people.some(p => p.name === st.tab)) st.tab = 'all';
+
+  // 画像などのURLで直接開かれたとき：該当の画像があれば拡大表示、なければ404の表示
+  let opening = null;
+  if (!deepDone) {
+    opening = fromUrl();
+    if (!opening) {
+      if (!fresh) return; // 前回のデータだけでは判断せず、最新のデータを待つ
+      deepDone = true;
+      showNotFound();
+      return;
+    }
+    deepDone = true;
+    document.documentElement.classList.remove('deep');
+  }
+
   $('#msg').hidden = true;
   buildTabs();
   renderHero();
   render();
-  // 画像のURLで直接開かれたときは、その画像を拡大表示する
-  if (first) { const f = fromUrl(); if (f) openAt([f], 0, false, true); }
+  started = true;
+  if (opening) openAt([opening], 0, false, true);
 }
 
 // 前回のデータがあれば先に表示し、裏で最新を取得して、変わっていたら入れ替える
@@ -408,20 +449,21 @@ function init(data, first) {
   let sig = null;
   try {
     const cached = localStorage.getItem(CACHE_KEY);
-    if (cached) { const d = JSON.parse(cached); init(d, true); sig = JSON.stringify(d.people); }
+    if (cached) { const d = JSON.parse(cached); init(d, false); sig = JSON.stringify(d.people); }
   } catch (e) { sig = null; }
   try {
     const res = await fetch(API_URL);
     if (!res.ok) throw new Error(res.status);
     const d = await res.json();
     const s2 = JSON.stringify(d.people);
-    if (s2 !== sig) {
-      init(d, sig === null);
+    if (s2 !== sig || !deepDone) {
+      init(d, true);
       sig = s2;
       try { localStorage.setItem(CACHE_KEY, JSON.stringify(d)); } catch (e) {}
     }
   } catch (e) {
-    if (sig === null) {
+    if (sig === null || !deepDone) {
+      document.documentElement.classList.remove('deep');
       const m = $('#msg');
       m.className = 'err';
       m.textContent = '読み込めませんでした。GASのデプロイ設定（アクセスできるユーザー：全員）とURLを確認してください。';
