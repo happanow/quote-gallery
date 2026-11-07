@@ -153,6 +153,8 @@ const box = { list: [], i: 0, random: false };
 const view = { list: [], n: 0 };
 const disp = n => /^others?$/i.test(n) ? 'その他' : n; // 表示名（Others → その他）
 const isOther = n => disp(n) === 'その他';
+const BASE = new URL('.', location.href).pathname; // サイトの基準パス（例：/quote-gallery/）
+let nameCount = {}; // 同じファイル名が複数あるか（image.webp など）の判定用
 
 // ファイル名 quote_<DiscordのID>.webp から投稿日時を取り出す（取れなければ null = 日付不明）
 function snowDate(name) {
@@ -305,7 +307,21 @@ function render() {
   fill();
 }
 
-function openAt(list, i, random = false) {
+// 画像ごとのURL（例：/quote-gallery/quote_123.webp）。同名ファイルが複数あるときだけ ?id= を付けて区別する
+function urlOf(it) {
+  return BASE + encodeURIComponent(it.name) + (nameCount[it.name] > 1 ? '?id=' + it.id : '') + location.hash;
+}
+// 今のURLが指している画像を探す（なければ null）
+function fromUrl() {
+  let name;
+  try { name = decodeURIComponent(location.pathname.slice(BASE.length)); } catch { return null; }
+  if (!name || name === 'index.html') return null;
+  const id = new URLSearchParams(location.search).get('id');
+  return st.items.find(i => id ? i.id === id : i.name === name) || null;
+}
+
+function openAt(list, i, random = false, fromUrlOpen = false) {
+  const wasOpen = $('#dlg').open;
   box.list = list; box.i = i; box.random = random;
   const it = list[i];
   $('#dImg').src = src(it.id, 1200);
@@ -316,7 +332,11 @@ function openAt(list, i, random = false) {
   $('#dl').setAttribute('download', it.name);
   $('#prev').hidden = $('#next').hidden = list.length < 2;
   $('#again').hidden = !random;
-  if (!$('#dlg').open) $('#dlg').showModal();
+  if (!wasOpen) $('#dlg').showModal();
+  // アドレスバーを、その画像のURLにする
+  if (fromUrlOpen) { history.replaceState(null, '', urlOf(it)); box.pushed = false; }
+  else if (wasOpen) history.replaceState(null, '', urlOf(it)); // ←→で移動中は履歴を増やさない
+  else { history.pushState({ img: it.id }, '', urlOf(it)); box.pushed = true; }
 }
 // 今表示している範囲（選択中の人。「すべて」なら全員）からランダムに1枚選ぶ
 function openRandom(prevId) {
@@ -333,6 +353,17 @@ $('#again').onclick = () => openRandom(box.list[0].id);
 $('#rnd').onclick = () => openRandom();
 $('#close').onclick = () => $('#dlg').close();
 $('#dlg').addEventListener('click', e => { if (e.target === $('#dlg')) $('#dlg').close(); });
+// 閉じたらURLを元に戻す（開いたときに履歴を足していれば「戻る」で、そうでなければ書き換えで）
+$('#dlg').addEventListener('close', () => {
+  if (box.pushed) { box.pushed = false; history.back(); }
+  else history.replaceState(null, '', BASE + location.hash);
+});
+// ブラウザの「戻る／進む」に追従
+window.addEventListener('popstate', () => {
+  const f = fromUrl();
+  if (f) openAt([f], 0, false, true);
+  else if ($('#dlg').open) { box.pushed = false; $('#dlg').close(); }
+});
 document.addEventListener('keydown', e => {
   if (!$('#dlg').open || box.list.length < 2) return;
   if (e.key === 'ArrowLeft') step(-1);
@@ -357,6 +388,8 @@ function init(data, first) {
     posted: snowDate(it.name),
     uploaded: new Date(it.created || it.date)
   })));
+  nameCount = {};
+  for (const i of st.items) nameCount[i.name] = (nameCount[i.name] || 0) + 1;
   if (first) {
     const h = decodeURIComponent(location.hash.slice(1));
     if (st.people.some(p => p.name === h)) st.tab = h;
@@ -366,6 +399,8 @@ function init(data, first) {
   buildTabs();
   renderHero();
   render();
+  // 画像のURLで直接開かれたときは、その画像を拡大表示する
+  if (first) { const f = fromUrl(); if (f) openAt([f], 0, false, true); }
 }
 
 // 前回のデータがあれば先に表示し、裏で最新を取得して、変わっていたら入れ替える

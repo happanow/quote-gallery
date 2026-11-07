@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MiQ Archive</title>
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="preconnect" href="https://drive.google.com">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#edf0f7;--card:#fff;--ink:#161c33;--muted:#5b6482;--line:#c9d0e4;--accent:#2b44f5;--mark:#ffe14d;--ease:cubic-bezier(.4,0,.2,1)}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{position:relative;margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.7 "Noto Sans JP",system-ui,sans-serif}
+#sentinel{position:absolute;top:0;left:0;width:1px;height:600px;pointer-events:none}
+.wrap{max-width:1240px;margin:0 auto;padding:24px 16px 64px}
+h1{font:700 clamp(26px,5vw,40px)/1.2 "Noto Sans JP",sans-serif;margin:0 0 20px}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+.layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:28px;align-items:start}
+
+/* 左メニュー */
+.side{position:sticky;top:16px;display:flex;flex-direction:column;gap:16px;max-height:calc(100vh - 32px)}
+#tabs{position:relative;display:flex;flex-direction:column;gap:2px;min-height:0;overflow-y:auto;box-shadow:inset 1px 0 0 var(--line)}
+#tabs button{position:relative;z-index:1;display:flex;justify-content:space-between;gap:8px;text-align:left;background:none;border:0;padding:8px 12px;color:var(--muted);overflow-wrap:anywhere;transition:color .2s}
+#tabs button:hover{color:var(--ink)}
+#tabs button[aria-selected=true]{color:var(--ink);font-weight:700}
+#tabs small{color:var(--muted);font-weight:400}
+.ind{position:absolute;z-index:0;left:0;top:0;width:100%;height:var(--h,0);background:var(--card);border-left:3px solid var(--accent);transform:translateY(var(--y,0));pointer-events:none}
+#tabs.ready .ind{transition:transform .28s var(--ease),height .28s var(--ease)}
+.drive{margin-top:12px;padding:0 12px;color:var(--muted);font-size:12px;text-decoration:none;transition:color .2s}
+.drive:hover{color:var(--accent);text-decoration:underline}
+
+/* 今日の名言 */
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:24px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px;margin-bottom:24px}
+.mark{display:inline;margin:0;font:700 26px/1.5 "Noto Sans JP",sans-serif;background:linear-gradient(transparent 55%,var(--mark) 55%)}
+.hero p{margin:10px 0 0;color:var(--muted)}
+/* 画像の枠は先に大きさを確保しておく（読み込み前に全部が「画面内」扱いにならず、見えている分だけ読み込まれる） */
+.thumb{position:relative;display:block;padding:0;border:1px solid var(--line);border-radius:6px;background:#f6f7fb;overflow:hidden;cursor:zoom-in;width:100%;aspect-ratio:1.9;transition:border-color .2s,transform .2s var(--ease)}
+.thumb:hover{border-color:var(--accent);transform:translateY(-2px)}
+.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+
+/* 操作バー */
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:0 0 16px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
+.seg button{border:0;background:none;padding:6px 14px;transition:background-color .2s,color .2s}
+.seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+#dir,#rnd{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 12px;transition:border-color .2s}
+#dir:hover,#rnd:hover{border-color:var(--accent)}
+.arr{display:inline-block;transition:transform .25s var(--ease)}
+#dir.up .arr{transform:rotate(180deg)}
+#count{margin-left:auto;color:var(--muted)}
+
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;align-items:start}
+#grid.fade{animation:fade .3s var(--ease)}
+#more{height:1px}
+figure{margin:0}
+figcaption{margin-top:4px;font-size:13px;color:var(--muted)}
+.unk{background:var(--mark);color:var(--ink);padding:0 6px;border-radius:3px;font-weight:700}
+#msg{padding:24px 0;color:var(--muted)}
+#msg.err{color:#b3261e}
+
+/* 先頭へ戻るボタン */
+#top{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:5;width:44px;height:44px;border:0;border-radius:50%;background:var(--ink);color:#fff;font-size:20px;line-height:1;opacity:0;visibility:hidden;transform:translateY(8px);transition:opacity .25s var(--ease),transform .25s var(--ease),visibility .25s,background-color .2s}
+#top.show{opacity:1;visibility:visible;transform:none}
+#top:hover{background:var(--accent)}
+
+/* 拡大表示 */
+dialog{border:0;padding:0;background:transparent;max-width:min(96vw,1100px);color:#fff}
+dialog::backdrop{background:rgba(22,28,51,.85)}
+dialog[open]{animation:pop .2s var(--ease)}
+dialog[open]::backdrop{animation:fade .2s}
+dialog img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-radius:6px;background:#fff}
+.lb{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-top:10px}
+.lb button,.lb a{background:var(--card);color:var(--ink);border:0;border-radius:8px;padding:6px 14px;text-decoration:none}
+#dCap{flex:1 1 160px;text-align:left}
+@keyframes fade{from{opacity:0}}
+@keyframes pop{from{opacity:0;transform:scale(.97)}}
+
+@media(max-width:900px){.hero{grid-template-columns:1fr}}
+@media(max-width:720px){
+.layout{grid-template-columns:1fr;gap:16px}
+.side{position:static;max-height:none;gap:10px}
+#tabs{flex-direction:row;overflow-x:auto;box-shadow:inset 0 -1px 0 var(--line)}
+#tabs button{flex:none}
+.ind{width:var(--w,0);height:100%;border-left:0;border-bottom:3px solid var(--accent);transform:translateX(var(--x,0))}
+#tabs.ready .ind{transition:transform .28s var(--ease),width .28s var(--ease)}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="sentinel" aria-hidden="true"></div>
+<div class="wrap">
+  <h1>MiQ Archive</h1>
+  <div class="layout">
+    <aside class="side">
+      <nav id="tabs" role="tablist" aria-orientation="vertical" aria-label="人で絞り込み"></nav>
+      <a class="drive" href="https://drive.google.com/drive/folders/1WqZOuxO9yHGIZQvRQaInNWJcGkrHyzKI?usp=drive_link" target="_blank" rel="noopener">元のドライブフォルダを開く ↗</a>
+    </aside>
+    <main>
+      <section class="hero" id="hero" hidden>
+        <div>
+          <h2 class="mark">今日の名言</h2>
+          <p id="heroInfo"></p>
+        </div>
+        <button class="thumb" id="heroBtn" aria-label="今日の名言を拡大して表示"></button>
+      </section>
+
+      <div class="bar">
+        <div class="seg" role="group" aria-label="並び替えの基準">
+          <button id="kDate" aria-pressed="true">日付順</button>
+          <button id="kNew" aria-pressed="false">新着順</button>
+        </div>
+        <button id="dir" aria-label="並び順を切り替え"><span class="arr">↓</span> <span id="dirTxt"></span></button>
+        <button id="rnd">ランダムに表示</button>
+        <span id="count"></span>
+      </div>
+      <div id="msg">読み込み中…</div>
+      <div id="grid"></div>
+      <div id="more"></div>
+    </main>
+  </div>
+</div>
+<button id="top" aria-label="ページの先頭へ戻る">↑</button>
+
+<dialog id="dlg">
+  <img id="dImg" alt="">
+  <div class="lb">
+    <button id="prev" aria-label="前の画像">←</button>
+    <span id="dCap"></span>
+    <button id="next" aria-label="次の画像">→</button>
+    <button id="again" hidden>もう一度</button>
+    <a id="gd" href="#" target="_blank" rel="noopener">ドライブで見る</a>
+    <a id="dl" href="#" download>ダウンロード</a>
+    <button id="close">閉じる</button>
+  </div>
+</dialog>
+
+<script>
+// ▼ GASのウェブアプリURL
+const API_URL = 'https://script.google.com/macros/s/AKfycbxQ0hcpEPlBHUsrwhdL2vy8TbuQ6kXn7jSVLmcnHjV-KPRbgySq_tEO5id70L6Z-t3QSg/exec';
+const CACHE_KEY = 'miq-archive-v1';
+const PAGE = 30; // 一度に表示する枚数（スクロールすると続きを追加）
+
+const $ = s => document.querySelector(s);
+const st = { items: [], people: [], tab: 'all', key: 'date', dir: 'desc' };
+const box = { list: [], i: 0, random: false };
+const view = { list: [], n: 0 };
+const disp = n => /^others?$/i.test(n) ? 'その他' : n; // 表示名（Others → その他）
+const isOther = n => disp(n) === 'その他';
+const BASE = new URL('.', location.href).pathname; // サイトの基準パス（例：/quote-gallery/）
+let nameCount = {}; // 同じファイル名が複数あるか（image.webp など）の判定用
+
+// ファイル名 quote_<DiscordのID>.webp から投稿日時を取り出す（取れなければ null = 日付不明）
+function snowDate(name) {
+  const m = name.match(/^quote_(\d{15,})/i);
+  if (!m) return null;
+  try { return new Date(Number((BigInt(m[1]) >> 22n) + 1420070400000n)); } catch { return null; }
+}
+const fmt = d => d.toLocaleDateString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'Asia/Tokyo' });
+const ymd = d => new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '/'); // yyyy/mm/dd（日本時間）
+const src = (id, w) => `https://drive.google.com/thumbnail?id=${id}&sz=w${w}`;
+function mkImg(it, w, lazy) {
+  const i = new Image();
+  i.alt = `${it.person} の名言`;
+  i.decoding = 'async';
+  if (lazy) i.loading = 'lazy'; else i.fetchPriority = 'high';
+  const urls = [src(it.id, w), `https://lh3.googleusercontent.com/d/${it.id}=w${w}`];
+  let n = 0;
+  // 読み込めたら、枠を実際の縦横比に合わせる
+  i.onload = () => {
+    const p = i.parentElement;
+    if (p && p.classList.contains('thumb') && i.naturalWidth) p.style.aspectRatio = i.naturalWidth + '/' + i.naturalHeight;
+  };
+  // 失敗したら、別のURLに切り替えて少し待ってから最大3回やり直す
+  i.onerror = () => {
+    n++;
+    if (n < 4) setTimeout(() => { i.src = urls[n % 2]; }, 600 * n + Math.random() * 600);
+  };
+  // 画面に追加された後で読み込みを始める（遅延読み込みを確実に効かせるため）
+  queueMicrotask(() => { i.src = urls[0]; });
+  return i;
+}
+const label = it => `${it.person}・${it.posted ? fmt(it.posted) : '日付不明'}`;
+
+function hash(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function todayKey() { return new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); }
+
+function renderHero() {
+  if (!st.items.length) return;
+  const k = todayKey();
+  // 日付ごとに固定のランダム（画像が増えても当日の選出が変わりにくい方式）
+  const pick = st.items.reduce((a, b) => hash(k + a.id) >= hash(k + b.id) ? a : b);
+  const btn = $('#heroBtn');
+  btn.replaceChildren(mkImg(pick, 640, false));
+  $('#heroInfo').textContent = `${pick.person}・${pick.posted ? ymd(pick.posted) : '不明'}`;
+  btn.onclick = () => openAt([pick], 0);
+  $('#hero').hidden = false;
+}
+
+// 左メニューは最初に1回だけ作り、選択のハイライト（.ind）を動かして切り替えを見せる
+function buildTabs() {
+  const t = $('#tabs');
+  t.replaceChildren();
+  const tabs = [{ name: 'all', text: 'すべて', n: st.items.length }, ...st.people.map(p => ({ name: p.name, text: p.name, n: p.count }))];
+  for (const x of tabs) {
+    const b = document.createElement('button');
+    b.setAttribute('role', 'tab');
+    b.dataset.name = x.name;
+    b.textContent = x.text;
+    const s = document.createElement('small');
+    s.textContent = x.n;
+    b.append(s);
+    b.onclick = () => { st.tab = x.name; location.hash = x.name === 'all' ? '' : encodeURIComponent(x.name); render(); window.scrollTo(0, 0); };
+    t.append(b);
+  }
+  const ind = document.createElement('span');
+  ind.className = 'ind';
+  ind.setAttribute('aria-hidden', 'true');
+  t.append(ind);
+}
+function updateTabs() {
+  const t = $('#tabs');
+  let cur = null;
+  for (const b of t.querySelectorAll('button')) {
+    const on = b.dataset.name === st.tab;
+    b.setAttribute('aria-selected', String(on));
+    if (on) cur = b;
+  }
+  if (!cur) return;
+  t.style.setProperty('--x', cur.offsetLeft + 'px');
+  t.style.setProperty('--y', cur.offsetTop + 'px');
+  t.style.setProperty('--w', cur.offsetWidth + 'px');
+  t.style.setProperty('--h', cur.offsetHeight + 'px');
+  // 最初の配置では動かさず、2回目以降の切り替えからアニメーションさせる
+  if (!t.classList.contains('ready')) requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('ready')));
+}
+window.addEventListener('resize', updateTabs);
+
+function visible() {
+  const list = st.tab === 'all' ? [...st.items] : st.items.filter(i => i.person === st.tab);
+  const s = st.dir === 'asc' ? 1 : -1;
+  return list.sort((a, b) => {
+    if (st.key === 'date') {
+      // 日付不明は常に先頭
+      if (!a.posted && !b.posted) return b.uploaded - a.uploaded;
+      if (!a.posted) return -1;
+      if (!b.posted) return 1;
+      return (a.posted - b.posted) * s;
+    }
+    return (a.uploaded - b.uploaded) * s;
+  });
+}
+
+function card(it, list, idx) {
+  const f = document.createElement('figure');
+  const b = document.createElement('button');
+  b.className = 'thumb';
+  b.setAttribute('aria-label', `${label(it)} を拡大`);
+  b.append(mkImg(it, 320, true));
+  b.onclick = () => openAt(list, idx);
+  const c = document.createElement('figcaption');
+  if (st.key === 'date') {
+    if (st.tab === 'all') c.append(it.person + '・');
+    if (it.posted) c.append(fmt(it.posted));
+    else { const u = document.createElement('span'); u.className = 'unk'; u.textContent = '日付不明'; c.append(u); }
+  } else {
+    c.textContent = (st.tab === 'all' ? it.person + '・' : '') + '追加 ' + fmt(it.uploaded);
+  }
+  f.append(b, c);
+  return f;
+}
+// 続きを PAGE 枚ぶん追加する
+function more() {
+  const { list } = view;
+  if (view.n >= list.length) return;
+  const end = Math.min(view.n + PAGE, list.length);
+  const frag = document.createDocumentFragment();
+  for (let k = view.n; k < end; k++) frag.append(card(list[k], list, k));
+  view.n = end;
+  $('#grid').append(frag);
+}
+// 画面の下端に近づいている間は、続きを追加する
+function fill() {
+  while (view.n < view.list.length && $('#more').getBoundingClientRect().top < innerHeight + 800) more();
+}
+new IntersectionObserver(es => { if (es[0].isIntersecting) fill(); }, { rootMargin: '800px 0px' }).observe($('#more'));
+
+function render() {
+  updateTabs();
+  $('#kDate').setAttribute('aria-pressed', String(st.key === 'date'));
+  $('#kNew').setAttribute('aria-pressed', String(st.key === 'new'));
+  const desc = st.dir === 'desc';
+  $('#dir').classList.toggle('up', !desc);
+  $('#dirTxt').textContent = st.key === 'date' ? (desc ? '新しい順' : '古い順') : (desc ? '追加が新しい順' : '追加が古い順');
+  view.list = visible();
+  view.n = 0;
+  $('#count').textContent = `${view.list.length}枚`;
+  const g = $('#grid');
+  g.replaceChildren();
+  g.classList.remove('fade'); void g.offsetWidth; g.classList.add('fade');
+  fill();
+}
+
+// 画像ごとのURL（例：/quote-gallery/quote_123.webp）。同名ファイルが複数あるときだけ ?id= を付けて区別する
+function urlOf(it) {
+  return BASE + encodeURIComponent(it.name) + (nameCount[it.name] > 1 ? '?id=' + it.id : '') + location.hash;
+}
+// 今のURLが指している画像を探す（なければ null）
+function fromUrl() {
+  let name;
+  try { name = decodeURIComponent(location.pathname.slice(BASE.length)); } catch { return null; }
+  if (!name || name === 'index.html') return null;
+  const id = new URLSearchParams(location.search).get('id');
+  return st.items.find(i => id ? i.id === id : i.name === name) || null;
+}
+
+function openAt(list, i, random = false, fromUrlOpen = false) {
+  const wasOpen = $('#dlg').open;
+  box.list = list; box.i = i; box.random = random;
+  const it = list[i];
+  $('#dImg').src = src(it.id, 1200);
+  $('#dImg').alt = `${it.person} の名言`;
+  $('#dCap').textContent = label(it);
+  $('#gd').href = `https://drive.google.com/file/d/${it.id}/view`;
+  $('#dl').href = `https://drive.usercontent.google.com/download?id=${it.id}&export=download`;
+  $('#dl').setAttribute('download', it.name);
+  $('#prev').hidden = $('#next').hidden = list.length < 2;
+  $('#again').hidden = !random;
+  if (!wasOpen) $('#dlg').showModal();
+  // アドレスバーを、その画像のURLにする
+  if (fromUrlOpen) { history.replaceState(null, '', urlOf(it)); box.pushed = false; }
+  else if (wasOpen) history.replaceState(null, '', urlOf(it)); // ←→で移動中は履歴を増やさない
+  else { history.pushState({ img: it.id }, '', urlOf(it)); box.pushed = true; }
+}
+// 今表示している範囲（選択中の人。「すべて」なら全員）からランダムに1枚選ぶ
+function openRandom(prevId) {
+  const pool = visible();
+  if (!pool.length) return;
+  let it;
+  do { it = pool[Math.floor(Math.random() * pool.length)]; } while (pool.length > 1 && it.id === prevId);
+  openAt([it], 0, true);
+}
+const step = d => { const n = box.list.length; openAt(box.list, (box.i + d + n) % n); };
+$('#prev').onclick = () => step(-1);
+$('#next').onclick = () => step(1);
+$('#again').onclick = () => openRandom(box.list[0].id);
+$('#rnd').onclick = () => openRandom();
+$('#close').onclick = () => $('#dlg').close();
+$('#dlg').addEventListener('click', e => { if (e.target === $('#dlg')) $('#dlg').close(); });
+// 閉じたらURLを元に戻す（開いたときに履歴を足していれば「戻る」で、そうでなければ書き換えで）
+$('#dlg').addEventListener('close', () => {
+  if (box.pushed) { box.pushed = false; history.back(); }
+  else history.replaceState(null, '', BASE + location.hash);
+});
+// ブラウザの「戻る／進む」に追従
+window.addEventListener('popstate', () => {
+  const f = fromUrl();
+  if (f) openAt([f], 0, false, true);
+  else if ($('#dlg').open) { box.pushed = false; $('#dlg').close(); }
+});
+document.addEventListener('keydown', e => {
+  if (!$('#dlg').open || box.list.length < 2) return;
+  if (e.key === 'ArrowLeft') step(-1);
+  if (e.key === 'ArrowRight') step(1);
+});
+
+$('#kDate').onclick = () => { st.key = 'date'; render(); };
+$('#kNew').onclick = () => { st.key = 'new'; render(); };
+$('#dir').onclick = () => { st.dir = st.dir === 'desc' ? 'asc' : 'desc'; render(); };
+
+// 先頭へ戻るボタン：ページ上部（600px）を過ぎたら表示
+const topBtn = $('#top');
+new IntersectionObserver(es => topBtn.classList.toggle('show', !es[0].isIntersecting)).observe($('#sentinel'));
+topBtn.onclick = () => window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+
+function init(data, first) {
+  // 「その他」は常に最後（それ以外の並びはそのまま）
+  const ppl = [...data.people].sort((a, b) => isOther(a.name) - isOther(b.name));
+  st.people = ppl.map(p => ({ name: disp(p.name), count: p.items.length }));
+  st.items = ppl.flatMap(p => p.items.map(it => ({
+    id: it.id, name: it.name, person: disp(p.name),
+    posted: snowDate(it.name),
+    uploaded: new Date(it.created || it.date)
+  })));
+  nameCount = {};
+  for (const i of st.items) nameCount[i.name] = (nameCount[i.name] || 0) + 1;
+  if (first) {
+    const h = decodeURIComponent(location.hash.slice(1));
+    if (st.people.some(p => p.name === h)) st.tab = h;
+  }
+  if (st.tab !== 'all' && !st.people.some(p => p.name === st.tab)) st.tab = 'all';
+  $('#msg').hidden = true;
+  buildTabs();
+  renderHero();
+  render();
+  // 画像のURLで直接開かれたときは、その画像を拡大表示する
+  if (first) { const f = fromUrl(); if (f) openAt([f], 0, false, true); }
+}
+
+// 前回のデータがあれば先に表示し、裏で最新を取得して、変わっていたら入れ替える
+(async () => {
+  let sig = null;
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) { const d = JSON.parse(cached); init(d, true); sig = JSON.stringify(d.people); }
+  } catch (e) { sig = null; }
+  try {
+    const res = await fetch(API_URL);
+    if (!res.ok) throw new Error(res.status);
+    const d = await res.json();
+    const s2 = JSON.stringify(d.people);
+    if (s2 !== sig) {
+      init(d, sig === null);
+      sig = s2;
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify(d)); } catch (e) {}
+    }
+  } catch (e) {
+    if (sig === null) {
+      const m = $('#msg');
+      m.className = 'err';
+      m.textContent = '読み込めませんでした。GASのデプロイ設定（アクセスできるユーザー：全員）とURLを確認してください。';
+    }
+  }
+})();
+if (document.fonts) document.fonts.ready.then(updateTabs); // フォント読み込みで幅が変わったらハイライトを合わせ直す
+</script>
+</body>
+</html>
