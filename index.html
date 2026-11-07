@@ -5,8 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MiQ Archive</title>
 <script>
-// 画像などのURLで直接開かれたときは、判定が済むまで画面を隠す
-if (location.pathname !== new URL('.', location.href).pathname && !/\/index\.html$/.test(location.pathname)) document.documentElement.classList.add('deep');
+// トップ以外のURLで開かれたときの振り分け
+//  ・画像ファイル名の形（〜.webp など）：データを読み込んで判定するまで画面を隠す（deep）
+//  ・それ以外：データを待たずに、すぐ404（nf）
+(function () {
+  const base = new URL('.', location.href).pathname, p = location.pathname;
+  if (p === base || /\/index\.html$/.test(p)) return;
+  document.documentElement.classList.add(/\.(webp|png|jpe?g|gif|avif|bmp)$/i.test(p) ? 'deep' : 'nf');
+})();
 </script>
 <link rel="preconnect" href="https://script.google.com" crossorigin>
 <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
@@ -71,6 +77,9 @@ figcaption{margin-top:4px;font-size:13px;color:var(--muted)}
 /* 404 */
 .deep .wrap{visibility:hidden}
 .nf .wrap,.nf #top{display:none}
+html.nf #nf{display:block!important}
+#wait{display:none}
+.deep #wait{display:block;max-width:520px;margin:20vh auto 0;text-align:center;color:var(--muted)}
 #nf{max-width:520px;margin:20vh auto 0;padding:0 16px;text-align:center}
 #nf h1{font-size:72px;margin:0}
 #nf p{margin:6px 0;color:var(--muted)}
@@ -112,6 +121,7 @@ dialog img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
   <p class="sub">Not Found</p>
   <p>指定されたページは見つかりませんでした。正しいURLか確認してください。</p>
 </section>
+<p id="wait">読み込み中…</p>
 <div class="wrap">
   <h1>MiQ Archive</h1>
   <div class="layout">
@@ -400,7 +410,8 @@ new IntersectionObserver(es => topBtn.classList.toggle('show', !es[0].isIntersec
 topBtn.onclick = () => window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 
 function showNotFound() {
-  document.documentElement.classList.replace('deep', 'nf');
+  document.documentElement.classList.remove('deep');
+  document.documentElement.classList.add('nf');
   $('#nf').hidden = false;
   document.title = '404 Not Found - MiQ Archive';
 }
@@ -445,7 +456,9 @@ function init(data, fresh) {
 }
 
 // 前回のデータがあれば先に表示し、裏で最新を取得して、変わっていたら入れ替える
-(async () => {
+if (document.documentElement.classList.contains('nf')) {
+  showNotFound(); // 画像ファイル名の形でないURLは、データを待たずにすぐ404
+} else (async () => {
   let sig = null;
   try {
     const cached = localStorage.getItem(CACHE_KEY);
